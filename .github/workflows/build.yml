@@ -11,7 +11,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, ubuntu-22.04, macos-latest]
+        include:
+          - os: ubuntu-24.04
+            name: Ubuntu 24.04
+          - os: ubuntu-22.04
+            name: Ubuntu 22.04
+          - os: macos-latest
+            name: macOS
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -22,31 +28,43 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config \
             libgtk-3-dev libssh2-1-dev libglib2.0-dev libjson-glib-dev
-          # Install geany dev package (name varies by version)
           sudo apt-get install -y geany libgeany-dev 2>/dev/null \
             || sudo apt-get install -y geany geany-dev 2>/dev/null \
-            || {
-              # Fallback: install geany and build headers from source
-              sudo apt-get install -y geany intltool libvte-2.91-dev
-              GEANY_VER=$(dpkg -s geany | grep ^Version | cut -d' ' -f2 | cut -d- -f1)
-              cd /tmp
-              wget -q "https://download.geany.org/geany-${GEANY_VER}.tar.gz" \
-                || wget -q "https://download.geany.org/geany-${GEANY_VER}.tar.bz2" -O geany-src.tar.bz2
-              tar xf geany-*.tar.* 2>/dev/null
-              cd geany-*/
+            || sudo apt-get install -y geany
+
+      - name: Install Geany headers from source (Ubuntu fallback)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          if ! pkg-config --exists geany 2>/dev/null; then
+            GEANY_VER=$(dpkg -s geany | grep ^Version | cut -d' ' -f2 | cut -d- -f1)
+            cd /tmp
+            wget -q "https://download.geany.org/geany-${GEANY_VER}.tar.gz" || true
+            wget -q "https://download.geany.org/geany-${GEANY_VER}.tar.bz2" || true
+            tar xf geany-*.tar.* 2>/dev/null || true
+            cd geany-*/ 2>/dev/null
+            if [ -f configure ]; then
               ./configure --prefix=/usr >/dev/null 2>&1
-              sudo make install-includeHEADERS install-pkgconfigDATA >/dev/null 2>&1 \
-                || sudo cp -r src/*.h /usr/include/geany/ 2>/dev/null
-            }
+              sudo make -C src install-includeHEADERS 2>/dev/null || true
+              sudo cp geany.pc /usr/lib/pkgconfig/ 2>/dev/null \
+                || sudo cp geany.pc /usr/lib/x86_64-linux-gnu/pkgconfig/ 2>/dev/null || true
+            fi
+          fi
+          pkg-config --cflags geany
 
       - name: Install dependencies (macOS)
         if: startsWith(matrix.os, 'macos')
         run: |
-          brew install geany gtk+3 libssh2 glib json-glib pkg-config
-
-      - name: Verify pkg-config
-        run: |
-          pkg-config --cflags geany gtk+-3.0 libssh2 json-glib-1.0
+          brew install --formula gtk+3 libssh2 glib json-glib pkg-config
+          # Build geany from source for headers + pkg-config
+          brew install --formula geany || {
+            brew install intltool vte3
+            cd /tmp
+            wget -q https://download.geany.org/geany-2.0.tar.gz
+            tar xf geany-2.0.tar.gz && cd geany-2.0
+            ./configure --prefix=$(brew --prefix)
+            make -j$(sysctl -n hw.ncpu)
+            make install
+          }
 
       - name: Build
         run: make
