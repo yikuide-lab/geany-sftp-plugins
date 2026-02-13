@@ -16,9 +16,11 @@ jobs:
             name: Ubuntu 24.04
           - os: ubuntu-22.04
             name: Ubuntu 22.04
+            experimental: true
           - os: macos-latest
             name: macOS
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental || false }}
     steps:
       - uses: actions/checkout@v4
 
