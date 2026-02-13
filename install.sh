@@ -37,8 +37,9 @@ install_deps() {
     case "$OS" in
         debian)
             sudo apt-get update
-            sudo apt-get install -y build-essential geany libgeany-dev \
+            sudo apt-get install -y build-essential geany \
                 libgtk-3-dev libssh2-1-dev libglib2.0-dev libjson-glib-dev
+            sudo apt-get install -y libgeany-dev || sudo apt-get install -y geany-dev
             ;;
         fedora)
             sudo dnf install -y gcc make geany geany-devel \
